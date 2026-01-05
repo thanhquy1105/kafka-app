@@ -1,0 +1,20 @@
+# Producer Configuration
+brokers:
+  - localhost:19092
+  - localhost:29092
+  - localhost:39092
+
+topic: events
+
+# Batch settings
+batch_size: 1048576  # 1MB
+batch_timeout_ms: 100
+
+# Retry settings
+max_retries: 3
+
+# Logging
+log_level: info
+
+# Metrics
+metrics_port: 9090
