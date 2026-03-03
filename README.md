@@ -1,240 +1,108 @@
-# Kafka Producer/Consumer Application
+# Kafka Producer/Consumer Application (Boilerplate)
 
-A production-ready Kafka producer and consumer application built with [franz-go](https://github.com/twmb/franz-go).
+A production-ready Kafka application built with [franz-go](https://github.com/twmb/franz-go), designed as a clean, structured boilerplate for Go-based Kafka services.
 
-## Features
+---
 
-### Producer
-- ✅ Batch producing with configurable batch size and timeout
-- ✅ Async and sync produce methods
-- ✅ Automatic retry logic
-- ✅ Graceful shutdown with message flushing
-- ✅ Structured JSON logging
+## 🏗️ Architecture & Semantics
 
-### Consumer
-- ✅ Consumer group support with auto-rebalancing
-- ✅ Configurable offset commit (auto/manual)
-- ✅ Error handling and recovery
-- ✅ Graceful shutdown with offset commit
-- ✅ Structured JSON logging
+### Message Delivery: **At-least-once**
+This application currently implements **At-least-once** semantics. This is the most common pattern for high-performance applications where speed is a priority and the business logic can handle occasional duplicate messages (idempotency).
 
-## Project Structure
+- **Producer:** Retries sending messages until it receives an acknowledgement (ACK) from the Kafka broker.
+- **Consumer:** Manual offset committing is performed *after* the message has been successfully processed. If the consumer crashes during processing, it will re-read the last uncommitted messages upon restart.
 
-```
+> [!TIP]
+> If you need **Exactly-Once Semantics (EOS)**, refer to the transactional example in `../examples/transactions/eos/`.
+
+### Tech Stack
+- **Language:** Go 1.21+
+- **Library:** `franz-go` (High-performance, feature-rich Kafka client).
+- **Format:** Structured JSON Logging for ELK/Grafana integration.
+
+---
+
+## 📂 Project Structure
+
+```text
 kafka-app/
 ├── cmd/
-│   ├── producer/          # Producer binary
-│   └── consumer/          # Consumer binary
+│   ├── producer/          # Entry point for the Producer service
+│   └── consumer/          # Entry point for the Consumer service
 ├── internal/
-│   ├── config/            # Configuration loader
-│   ├── producer/          # Producer logic
-│   ├── consumer/          # Consumer logic
-│   └── models/            # Data models
+│   ├── config/            # YAML configuration mapping and loading
+│   ├── producer/          # Core Producer logic (connection handling, async sending)
+│   ├── consumer/          # Core Consumer logic (polling, record processing)
+│   └── models/            # Shared data structures (Event schema)
 ├── pkg/
-│   └── logger/            # Shared logger
-├── configs/               # YAML configs
-├── tests/                 # Unit tests
-└── Makefile              # Build commands
+│   └── logger/            # Zap-based structured logger
+├── configs/               # Configuration files (.yaml)
+├── tests/                 # Integration and unit tests using kfake
+└── Makefile              # Automation for build, run, and test
 ```
 
-## Prerequisites
+---
 
-- Go 1.21+
-- Kafka cluster (or use Docker Compose)
+## 🚀 Getting Started
 
-## Quick Start
+### 1. Prerequisites
+- Docker & Docker Compose (for running a local Kafka cluster)
+- Go 1.21+ installed locally
 
-### 1. Install Dependencies
-
+### 2. Spin up Kafka
+Use the provided `docker-compose.yml` to start a 3-node Kafka cluster:
 ```bash
-make deps
+docker-compose up -d
 ```
 
-### 2. Configure
-
-Edit `configs/producer.yaml` and `configs/consumer.yaml` with your Kafka broker addresses.
-
-### 3. Build
-
+### 3. Build & Run
+**Build the binaries:**
 ```bash
 make build
 ```
 
-### 4. Run Producer
+**Run the Producer:** (Generates mock events every second)
+```bash
+./bin/producer -config configs/producer.yaml
+```
+
+**Run the Consumer:** (Processes and logs events)
+```bash
+./bin/consumer -config configs/consumer.yaml
+```
+
+---
+
+## 🔧 Configuration
+
+The application is highly configurable via YAML files in the `configs/` directory.
+
+### Key Producer Settings
+- `batch_size`: Maximum bytes before sending a batch (default 1MB).
+- `batch_timeout_ms`: Maximum time to wait before sending a partial batch.
+
+### Key Consumer Settings
+- `group_id`: Identifies the consumer group for balanced processing.
+- `auto_commit`: Toggles between automatic or manual offset committing.
+
+---
+
+## 🧪 Testing
+We use `kfake` to simulate Kafka without needing a real cluster for unit tests.
 
 ```bash
-make run-producer
+make test          # Run all tests
+make test-coverage # Check code coverage
 ```
 
-### 5. Run Consumer (in another terminal)
+---
 
-```bash
-make run-consumer
-```
+## 💡 Best Practices Implemented
+- **Graceful Shutdown:** Handles `SIGINT`/`SIGTERM` to flush the producer's buffer and commit consumer offsets before exiting.
+- **Structured Logging:** All logs are in JSON format, making them easy to parse in production environments.
+- **Clean Architecture:** Separates business logic from the Kafka transport layer.
 
-## Configuration
+---
 
-### Producer (`configs/producer.yaml`)
-
-```yaml
-brokers:
-  - localhost:19092
-  - localhost:29092
-  - localhost:39092
-topic: events
-batch_size: 1048576        # 1MB
-batch_timeout_ms: 100
-max_retries: 3
-log_level: info
-```
-
-### Consumer (`configs/consumer.yaml`)
-
-```yaml
-brokers:
-  - localhost:19092
-  - localhost:29092
-  - localhost:39092
-topics:
-  - events
-group_id: kafka-app-consumer-group
-auto_commit: true
-commit_interval_ms: 5000
-log_level: info
-```
-
-## Development
-
-### Run Tests
-
-```bash
-make test
-```
-
-Tests use [kfake](https://pkg.go.dev/github.com/twmb/franz-go/pkg/kfake) for testing without a real Kafka cluster.
-
-### Test with Coverage
-
-```bash
-make test-coverage
-```
-
-### Format Code
-
-```bash
-make fmt
-```
-
-### Clean Build Artifacts
-
-```bash
-make clean
-```
-
-## Usage Examples
-
-### Producer
-
-The producer automatically generates and sends events every second:
-
-```go
-event := &models.Event{
-    ID:        uuid.New().String(),
-    Type:      "test_event",
-    Timestamp: time.Now(),
-    Data: map[string]interface{}{
-        "message": "Hello from Kafka!",
-    },
-}
-```
-
-### Consumer
-
-The consumer processes events and logs them:
-
-```json
-{
-  "level": "INFO",
-  "msg": "consumed message",
-  "topic": "events",
-  "partition": 0,
-  "offset": 42,
-  "event_id": "123e4567-e89b-12d3-a456-426614174000"
-}
-```
-
-## Graceful Shutdown
-
-Both producer and consumer handle `SIGINT` and `SIGTERM` signals gracefully:
-
-- **Producer**: Flushes pending messages before shutdown
-- **Consumer**: Commits offsets before shutdown
-
-Press `Ctrl+C` to trigger graceful shutdown.
-
-## Monitoring
-
-Logs are output in JSON format for easy parsing:
-
-```json
-{
-  "time": "2026-01-03T15:00:00Z",
-  "level": "INFO",
-  "msg": "produced message",
-  "topic": "events",
-  "partition": 2,
-  "offset": 100,
-  "event_id": "abc-123"
-}
-```
-
-## Deployment
-
-### Build Binaries
-
-```bash
-make build
-```
-
-Binaries will be in `bin/`:
-- `bin/producer`
-- `bin/consumer`
-
-### Run in Production
-
-```bash
-# Producer
-./bin/producer -config /path/to/producer.yaml
-
-# Consumer
-./bin/consumer -config /path/to/consumer.yaml
-```
-
-## Troubleshooting
-
-### Connection Issues
-
-Check broker addresses in config files match your Kafka cluster.
-
-### Consumer Not Receiving Messages
-
-1. Verify topic exists
-2. Check consumer group ID
-3. Verify producer is running
-4. Check logs for errors
-
-### Producer Errors
-
-1. Check broker connectivity
-2. Verify topic exists or auto-create is enabled
-3. Check batch size and timeout settings
-
-## License
-
+## 📄 License
 MIT
-
-## Resources
-
-- [franz-go Documentation](https://pkg.go.dev/github.com/twmb/franz-go)
-- [franz-go Examples](https://github.com/twmb/franz-go/tree/master/examples)
-- [Kafka Documentation](https://kafka.apache.org/documentation/)
